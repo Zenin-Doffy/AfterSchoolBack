@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>After-School Classes</title>
+  <script src="https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.js"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div id="app">
+    <h1>After-School Classes</h1>
+
+    <div v-if="currentPage === 'lessons'">
+      <div>
+        <input v-model="searchQuery" placeholder="Search lessons" />
+        <select v-model="sortBy">
+          <option value="subject">Subject</option>
+          <option value="location">Location</option>
+          <option value="price">Price</option>
+          <option value="spaces">Spaces</option>
+        </select>
+        <select v-model="sortOrder">
+          <option value="asc">Ascending</option>
+          <option value="desc">Descending</option>
+        </select>
+      </div>
+
+      <button v-if="cart.length > 0" @click="goToCheckout">
+        Checkout ({{ cart.length }} items)
+      </button>
+
+      <div class="lesson-container">
+        <div v-for="lesson in sortedLessons" :key="lesson.subject" class="lesson">
+          <img :src="lesson.images" alt="lesson image" />
+          <p>Subject: {{ lesson.subject }}</p>
+          <p>Location: {{ lesson.location }}</p>
+          <p>Price: {{ lesson.price }} USD</p>
+          <p>Spaces: {{ lesson.spaces }}</p>
+          <i :class="'fa ' + lesson.icon"></i>
+          <button :disabled="lesson.spaces === 0" @click="addToCart(lesson)">
+            Add to Cart
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="currentPage === 'checkout'">
+      <h2>Checkout</h2>
+
+      <h3>Your Cart</h3>
+      <ul>
+        <li v-for="(lesson, index) in cart" :key="index">
+          {{ lesson.subject }}
+          <button @click="removeFromCart(lesson)">Remove</button>
+        </li>
+      </ul>
+
+      <label>
+        Name:
+        <input v-model="name" />
+      </label>
+      <label>
+        Phone:
+        <input v-model="phone" />
+      </label>
+      <button :disabled="cart.length === 0 || !isCheckoutValid()" @click="submitOrder">Submit Order</button>
+
+      <button @click="goToLessons">Back to Lessons</button>
+    </div>
+
+  </div>
+
+  <script>
+    new Vue({
+      el: '#app',
+      data() {
+        return {
+          lessons: [
+            { subject: 'Math', location: 'Room 101', price: 50, spaces: 5, icon: 'fa-book', image: 'image/Math.jpg' },
+            { subject: 'Science', location: 'Room 102', price: 55, spaces: 5, icon: 'fa-flask', image: 'image/Science.jpg' },
+            { subject: 'Art', location: 'Room 103', price: 60, spaces: 5, icon: 'fa-palette', image: 'image/Art.jpg' },
+            { subject: 'History', location: 'Room 104', price: 45, spaces: 5, icon: 'fa-landmark', image: 'image/History.jpg' },
+            { subject: 'Music', location: 'Room 105', price: 70, spaces: 5, icon: 'fa-music', image: 'image/Muusic.jpg' },
+            { subject: 'Coding', location: 'Room 106', price: 80, spaces: 5, icon: 'fa-laptop-code', image: 'image/Coding.jpg' },
+            { subject: 'Dancing', location: 'Room 107', price: 50, spaces: 5, icon: 'fa-dance', image: 'image/Dance.jpg' },
+            { subject: 'Sports', location: 'Field', price: 40, spaces: 5, icon: 'fa-basketball-ball', image: 'image/Spooorts.jpg' },
+            { subject: 'Literature', location: 'Room 108', price: 45, spaces: 5, icon: 'fa-book-open', image: 'image/Literature.jpg' },
+            { subject: 'Cooking', location: 'Room 109', price: 60, spaces: 5, icon: 'fa-utensils', image: 'image/Cooking.jpg' },
+            { subject: 'Photography', location: 'Room 110', price: 75, spaces: 5, icon: 'fa-camera', image: 'image/Photography.jpg' },
+            { subject: 'Chess', location: 'Room 111', price: 40, spaces: 5, icon: 'fa-chess', image: 'image/Chess.jpg' }
+          ],
+          cart: [],
+          sortBy: 'subject',
+          sortOrder: 'asc',
+          searchQuery: '',
+          name: '',
+          phone: '',
+          currentPage: 'lessons'
+        };
+      },
+      computed: {
+        sortedLessons() {
+          return this.lessons
+            .filter(lesson => {
+              return (
+                lesson.subject.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+                lesson.location.toLowerCase().includes(this.searchQuery.toLowerCase())
+              );
+            })
+            .sort((a, b) => {
+              let compareA = a[this.sortBy];
+              let compareB = b[this.sortBy];
+
+              if (this.sortBy === 'price' || this.sortBy === 'spaces') {
+                compareA = parseFloat(a[this.sortBy]);
+                compareB = parseFloat(b[this.sortBy]);
+              }
+
+              if (this.sortOrder === 'asc') {
+                return compareA < compareB ? -1 : compareA > compareB ? 1 : 0;
+              } else {
+                return compareA < compareB ? 1 : compareA > compareB ? -1 : 0;
+              }
+            });
+        }
+      },
+      methods: {
+        addToCart(lesson) {
+          if (lesson.spaces > 0) {
+            lesson.spaces--;
+            this.cart.push(lesson);
+          }
+        },
+        goToCheckout() {
+          this.currentPage = 'checkout';
+        },
+        removeFromCart(lesson) {
+          this.cart = this.cart.filter(item => item !== lesson);
+          lesson.spaces++;
+
+          // If cart is empty, disable checkout
+          if (this.cart.length === 0) {
+            this.currentPage = 'lessons';
+          }
+        },
+        submitOrder() {
+          if (this.cart.length > 0 && this.isCheckoutValid()) {
+            alert('Order submitted!');
+            this.cart = [];
+            this.name = '';
+            this.phone = '';
+            this.currentPage = 'lessons';
+          }
+        },
+        goToLessons() {
+          this.currentPage = 'lessons';
+        },
+        isCheckoutValid() {
+          const nameRegex = /^[A-Za-z]+$/;
+          const phoneRegex = /^[0-9]+$/;
+          return nameRegex.test(this.name) && phoneRegex.test(this.phone);
+        }
+      }
+    });
+  </script>
+
+</body>
+</html>
