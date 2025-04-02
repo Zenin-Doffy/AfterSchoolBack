@@ -2,22 +2,52 @@ const express = require("express");
 const { MongoClient, ObjectId } = require("mongodb");
 const path = require("path");
 const fs = require("fs");
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Logger middleware: log method, URL and timestamp
+// -------------------------------------
+// Utility: Formatted Logging Function
+// -------------------------------------
+function logActivity(activity, details = "") {
+  const now = new Date();
+  const formattedTime = now.toLocaleString("en-US", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  console.log(`[${formattedTime}] ${activity}${details ? " | " + details : ""}`);
+}
+
+// -------------------------------------
+// CORS Middleware
+// -------------------------------------
 app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Accept");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
+  if (req.method === "OPTIONS") return res.sendStatus(200);
   next();
 });
 
-// Create images directory if it doesn't exist
+// -------------------------------------
+// Logger Middleware
+// -------------------------------------
+app.use((req, res, next) => {
+  logActivity("Request", `${req.method} ${req.url}`);
+  next();
+});
+
+// -------------------------------------
+// Static File Middleware for Images
+// -------------------------------------
 const imagesDir = path.join(__dirname, "images");
 if (!fs.existsSync(imagesDir)) {
   fs.mkdirSync(imagesDir);
 }
-
-// Static file middleware: serve images from the "images" directory
 app.use("/images", express.static(imagesDir, {
   fallthrough: false,
   setHeaders: (res, filePath) => {
@@ -25,80 +55,106 @@ app.use("/images", express.static(imagesDir, {
   }
 }));
 
-// New endpoint to list all images in the images directory (for debugging)
-app.get("/images-list", (req, res) => {
-  fs.readdir(imagesDir, (err, files) => {
-    if (err) {
-      console.error("Error reading images directory:", err);
-      return res.status(500).json({ error: "Unable to read images directory" });
-    }
-    res.json({ images: files });
-  });
-});
-
-// CORS middleware: allow requests from any origin
-app.use((req, res, next) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
-  next();
-});
-
-// Parse JSON bodies
+// -------------------------------------
+// JSON Body Parser Middleware
+// -------------------------------------
 app.use(express.json());
 
-// Database connection using native MongoDB driver
-let db;
-const uri = "mongodb+srv://wednesday:wednesday@cluster0.2q635.mongodb.net/after_school_activities?retryWrites=true&w=majority";
+// -------------------------------------
+// MongoDB Connection and Helpers
+// -------------------------------------
+let client;
+const uri = process.env.MONGO_URI || "mongodb+srv://wednesday:wednesday@cluster0.2q635.mongodb.net/after_school_activities?retryWrites=true&w=majority";
 
-async function initializeDatabase() {
-  try {
-    const client = await MongoClient.connect(uri, { 
-      useNewUrlParser: true,
-      useUnifiedTopology: true 
-    });
-    
-    db = client.db("after_school_activities");
-    console.log("Connected to MongoDB");
-    
-    // Create text index for search on subject and location (if not exists)
-    await db.collection("lessons").createIndex(
-      { subject: "text", location: "text" },
-      { default_language: "english" }
-    );
-    
-    console.log("Created search indexes");
-    
-    // Load default lessons from the JSON file if there are less than 10 lessons
-    const lessonsCount = await db.collection("lessons").countDocuments();
-    if (lessonsCount < 10) {
-      const defaultLessonsPath = path.join(__dirname, "defaultLessons.json");
-      const defaultLessons = JSON.parse(fs.readFileSync(defaultLessonsPath, "utf8"));
-      
-      await db.collection("lessons").insertMany(defaultLessons.lessons);
-      console.log("Added default lessons from JSON file");
+// Helper: get current DB instance
+function getDb() {
+  if (!client) throw new Error("Database client not initialized");
+  return client.db("after_school_activities");
+}
+
+// Helper: retry mechanism with exponential backoff
+async function executeWithRetry(fn, retries = 3, delay = 1000) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (i < retries - 1) {
+        await new Promise((res) => setTimeout(res, delay));
+        delay *= 2;
+      } else {
+        throw error;
+      }
     }
-  } catch (err) {
-    console.error("Database connection error:", err);
-    process.exit(1);
   }
 }
 
+// Initialize MongoDB connection and indexes
+async function initializeDatabase() {
+  try {
+    client = new MongoClient(uri, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+    await client.connect();
+    logActivity("Info", "Connected to MongoDB");
+
+    const db = getDb();
+
+    // Create text index on 'subject' and 'location' for search
+    await executeWithRetry(() =>
+      db.collection("lessons").createIndex(
+        { subject: "text", location: "text" },
+        { default_language: "english" }
+      )
+    );
+    logActivity("Info", "Created search indexes");
+
+    // Load default lessons if less than 10 exist
+    const lessonsCount = await executeWithRetry(() =>
+      db.collection("lessons").countDocuments()
+    );
+    if (lessonsCount < 10) {
+      const defaultLessonsPath = path.join(__dirname, "defaultLessons.json");
+      const defaultLessons = JSON.parse(fs.readFileSync(defaultLessonsPath, "utf8"));
+      await executeWithRetry(() => db.collection("lessons").insertMany(defaultLessons.lessons));
+      logActivity("Info", "Added default lessons from JSON file");
+    }
+  } catch (err) {
+    logActivity("Error", `Database connection error: ${err.message}`);
+    process.exit(1);
+  }
+}
 initializeDatabase();
+
+// Graceful shutdown: close MongoDB client on SIGINT
+process.on("SIGINT", async () => {
+  logActivity("Info", "Closing database connection...");
+  if (client) await client.close();
+  process.exit(0);
+});
+
+// -------------------------------------
+// API Endpoints
+// -------------------------------------
 
 // Root endpoint
 app.get("/", (req, res) => {
+  logActivity("Info", "Root endpoint hit");
   res.send("School Activities API is running");
 });
 
-// GET /lessons: return all lessons
+// GET /lessons: return lessons with optional pagination
 app.get("/lessons", async (req, res) => {
   try {
-    if (!db) throw new Error("Database not connected");
-    const lessons = await db.collection("lessons").find().toArray();
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+    const lessons = await executeWithRetry(() =>
+      getDb().collection("lessons").find().skip(skip).limit(limit).toArray()
+    );
     res.json(lessons);
   } catch (err) {
-    console.error("Failed to fetch lessons:", err);
+    logActivity("Error", `Failed to fetch lessons: ${err.message}`);
     res.status(500).json({ error: "Failed to fetch lessons" });
   }
 });
@@ -106,35 +162,27 @@ app.get("/lessons", async (req, res) => {
 // PUT /lessons/:id: update lesson attributes (e.g., spaces, subject, etc.)
 app.put("/lessons/:id", async (req, res) => {
   try {
-    if (!db) throw new Error("Database not connected");
-    
-    // Get the fields to update from the request body
     const updates = req.body;
-    
-    // If "spaces" is provided, validate that it is a non-negative number
     if (updates.spaces !== undefined) {
       if (typeof updates.spaces !== "number" || updates.spaces < 0) {
         return res.status(400).json({ error: "Invalid spaces value" });
       }
     }
-    
-    // Remove _id if present (to prevent updating the document's _id)
     delete updates._id;
-    
-    // Update the lesson document with all provided attributes
-    const result = await db.collection("lessons").findOneAndUpdate(
-      { _id: new ObjectId(req.params.id) },
-      { $set: updates },
-      { returnDocument: "after" }
+    const result = await executeWithRetry(() =>
+      getDb().collection("lessons").findOneAndUpdate(
+        { _id: new ObjectId(req.params.id) },
+        { $set: updates },
+        { returnDocument: "after" }
+      )
     );
-    
     if (!result.value) {
       return res.status(404).json({ error: "Lesson not found" });
     }
-    
+    logActivity("Info", `Updated lesson with ID: ${req.params.id}`);
     res.json(result.value);
   } catch (err) {
-    console.error("Failed to update lesson:", err);
+    logActivity("Error", `Failed to update lesson: ${err.message}`);
     if (err.message.includes("invalid ObjectId")) {
       return res.status(400).json({ error: "Invalid lesson ID format" });
     }
@@ -145,77 +193,73 @@ app.put("/lessons/:id", async (req, res) => {
 // GET /search: perform full-text search on lessons
 app.get("/search", async (req, res) => {
   try {
-    if (!db) throw new Error("Database not connected");
     const query = req.query.q;
-    
     if (!query || typeof query !== "string") {
+      logActivity("Warning", "Search query required");
       return res.status(400).json({ error: "Search query required" });
     }
-    
-    // If query is numeric, also search on price and spaces
+    logActivity("Info", `Search query: ${query}`);
+
+    // If query is numeric, also search price and spaces
     const numericQuery = isNaN(query) ? null : Number(query);
-    const searchConditions = [
-      { subject: { $regex: query, $options: "i" } },
-      { location: { $regex: query, $options: "i" } }
-    ];
-    
+    let searchQuery;
     if (numericQuery !== null) {
-      searchConditions.push({ price: numericQuery });
-      searchConditions.push({ spaces: numericQuery });
+      searchQuery = {
+        $or: [
+          { $text: { $search: query } },
+          { price: numericQuery },
+          { spaces: numericQuery }
+        ]
+      };
+    } else {
+      searchQuery = { $text: { $search: query } };
     }
-    
-    const results = await db.collection("lessons").find({
-      $or: searchConditions
-    }).toArray();
-    
+    const results = await executeWithRetry(() =>
+      getDb().collection("lessons").find(searchQuery).toArray()
+    );
+    logActivity("Info", `Search returned ${results.length} result(s)`);
     res.json(results);
   } catch (err) {
-    console.error("Search failed:", err);
+    logActivity("Error", `Search failed: ${err.message}`);
     res.status(500).json({ error: "Search failed" });
   }
 });
 
-// POST /orders: save a new order (without modifying lesson spaces again)
+// POST /orders: place a new order with order validation and update lesson spaces
 app.post("/orders", async (req, res) => {
   try {
-    if (!db) throw new Error("Database not connected");
     const { name, phone, lessons } = req.body;
-    
-    // Validate name (only letters, spaces, hyphens or apostrophes, minimum 2 characters)
     if (!name || !/^[A-Za-z\s'-]{2,}$/.test(name.trim())) {
       return res.status(400).json({ error: "Invalid name (minimum 2 letters)" });
     }
-    
-    // Validate phone (digits only, minimum 8 digits)
     const phoneDigits = phone ? phone.replace(/\D/g, '') : '';
     if (phoneDigits.length < 8) {
       return res.status(400).json({ error: "Invalid phone (minimum 8 digits)" });
     }
-    
-    // Validate lessons array
     if (!Array.isArray(lessons) || lessons.length === 0) {
       return res.status(400).json({ error: "No lessons selected" });
     }
-    
-    // Verify that all requested lessons exist and have enough spaces
     const lessonIds = lessons.map(l => new ObjectId(l.lessonId));
-    const existingLessons = await db.collection("lessons")
-      .find({ _id: { $in: lessonIds } })
-      .toArray();
-    
+    const existingLessons = await executeWithRetry(() =>
+      getDb().collection("lessons").find({ _id: { $in: lessonIds } }).toArray()
+    );
     if (existingLessons.length !== lessons.length) {
       return res.status(400).json({ error: "One or more lessons not found" });
     }
-    
-    // Check that each lesson has enough available spaces for the requested quantity
+    // Check available spaces and decrement them accordingly
     for (const orderLesson of lessons) {
       const lessonFound = existingLessons.find(l => l._id.toString() === orderLesson.lessonId);
       if (!lessonFound || lessonFound.spaces < orderLesson.quantity) {
         return res.status(400).json({ error: `Not enough spaces available for lesson ID ${orderLesson.lessonId}` });
       }
+      await executeWithRetry(() =>
+        getDb().collection("lessons").updateOne(
+          { _id: new ObjectId(orderLesson.lessonId) },
+          { $inc: { spaces: -orderLesson.quantity } }
+        )
+      );
     }
-    
-    // Create the order document without updating lesson spaces (they were already updated when added to cart)
+    // Create the order document
     const order = {
       name: name.trim(),
       phone: phoneDigits,
@@ -223,15 +267,13 @@ app.post("/orders", async (req, res) => {
       date: new Date(),
       status: "confirmed"
     };
-    
-    const result = await db.collection("orders").insertOne(order);
-    
-    res.status(201).json({ 
-      message: "Order created successfully",
-      orderId: result.insertedId
-    });
+    const result = await executeWithRetry(() =>
+      getDb().collection("orders").insertOne(order)
+    );
+    logActivity("Info", `Order created with ID: ${result.insertedId}`);
+    res.status(201).json({ message: "Order created successfully", orderId: result.insertedId });
   } catch (err) {
-    console.error("Failed to create order:", err);
+    logActivity("Error", `Failed to create order: ${err.message}`);
     if (err.message.includes("invalid ObjectId")) {
       return res.status(400).json({ error: "Invalid lesson ID format" });
     }
@@ -239,30 +281,43 @@ app.post("/orders", async (req, res) => {
   }
 });
 
-// 404 handler for undefined endpoints
+// GET /orders: fetch orders with optional pagination
+app.get("/orders", async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+    const orders = await executeWithRetry(() =>
+      getDb().collection("orders").find().skip(skip).limit(limit).toArray()
+    );
+    res.json(orders);
+  } catch (err) {
+    logActivity("Error", `Failed to fetch orders: ${err.message}`);
+    res.status(500).json({ error: "Failed to fetch orders" });
+  }
+});
+
+// 404 Handler for undefined endpoints
 app.use((req, res) => {
   res.status(404).json({ error: "Endpoint not found" });
 });
 
-// General error handler
+// General Error Handler
 app.use((err, req, res, next) => {
-  console.error("Server error:", err);
+  logActivity("Error", `Server error: ${err.message}`);
   res.status(500).json({ error: "Internal server error" });
 });
 
-// Start the server
+// -------------------------------------
+// Start the Server
+// -------------------------------------
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  logActivity("Info", `Server running on port ${PORT}`);
   console.log("Available endpoints:");
-  console.log("- GET /lessons");
+  console.log("- GET /lessons?page=&limit=");
   console.log("- GET /search?q=query");
   console.log("- PUT /lessons/:id");
   console.log("- POST /orders");
-  console.log("- GET /images-list  (Lists available images)");
-});
-
-// Graceful shutdown on SIGINT
-process.on("SIGINT", async () => {
-  console.log("Shutting down server...");
-  process.exit(0);
+  console.log("- GET /orders?page=&limit=");
+  console.log("- GET /images (to serve images)");
 });
