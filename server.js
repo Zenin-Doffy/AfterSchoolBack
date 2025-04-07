@@ -5,7 +5,7 @@ const fs = require("fs");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
+const port = ""
 function logActivity(activity, details = "") {
   const now = new Date();
   const formattedTime = now.toLocaleString("en-US", {
