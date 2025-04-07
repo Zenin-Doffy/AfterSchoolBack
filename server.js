@@ -6,9 +6,6 @@ const fs = require("fs");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// -------------------------------------
-// Utility: Formatted Logging Function
-// -------------------------------------
 function logActivity(activity, details = "") {
   const now = new Date();
   const formattedTime = now.toLocaleString("en-US", {
@@ -22,9 +19,6 @@ function logActivity(activity, details = "") {
   console.log(`[${formattedTime}] ${activity}${details ? " | " + details : ""}`);
 }
 
-// -------------------------------------
-// CORS Middleware
-// -------------------------------------
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Accept");
@@ -33,36 +27,27 @@ app.use((req, res, next) => {
   next();
 });
 
-// -------------------------------------
-// Logger Middleware
-// -------------------------------------
 app.use((req, res, next) => {
   logActivity("Request", `${req.method} ${req.url}`);
   next();
 });
 
-// -------------------------------------
-// Static File Middleware for Images
-// -------------------------------------
 const imagesDir = path.join(__dirname, "images");
 if (!fs.existsSync(imagesDir)) {
   fs.mkdirSync(imagesDir);
 }
-app.use("/images", express.static(imagesDir, {
-  fallthrough: false,
-  setHeaders: (res, filePath) => {
-    res.set("Cache-Control", "public, max-age=3600");
-  }
-}));
+app.use(
+  "/images",
+  express.static(imagesDir, {
+    fallthrough: false,
+    setHeaders: (res, filePath) => {
+      res.set("Cache-Control", "public, max-age=3600");
+    }
+  })
+);
 
-// -------------------------------------
-// JSON Body Parser Middleware
-// -------------------------------------
 app.use(express.json());
 
-// -------------------------------------
-// MongoDB Connection and Helpers
-// -------------------------------------
 let client;
 const uri = process.env.MONGO_URI || "mongodb+srv://wednesday:wednesday@cluster0.2q635.mongodb.net/after_school_activities?retryWrites=true&w=majority";
 
@@ -133,11 +118,6 @@ process.on("SIGINT", async () => {
   process.exit(0);
 });
 
-// -------------------------------------
-// API Endpoints
-// -------------------------------------
-
-// Root endpoint
 app.get("/", (req, res) => {
   logActivity("Info", "Root endpoint hit");
   res.send("School Activities API is running");
@@ -297,20 +277,16 @@ app.get("/orders", async (req, res) => {
   }
 });
 
-// 404 Handler for undefined endpoints
 app.use((req, res) => {
   res.status(404).json({ error: "Endpoint not found" });
 });
 
-// General Error Handler
+
 app.use((err, req, res, next) => {
   logActivity("Error", `Server error: ${err.message}`);
   res.status(500).json({ error: "Internal server error" });
 });
 
-// -------------------------------------
-// Start the Server
-// -------------------------------------
 app.listen(PORT, () => {
   logActivity("Info", `Server running on port ${PORT}`);
   console.log("Available endpoints:");
