@@ -36,28 +36,23 @@ const imagesDir = path.join(__dirname, "images");
 if (!fs.existsSync(imagesDir)) {
   fs.mkdirSync(imagesDir);
 }
-app.use(
-  "/images",
-  express.static(imagesDir, {
-    fallthrough: false,
-    setHeaders: (res, filePath) => {
-      res.set("Cache-Control", "public, max-age=3600");
-    }
-  })
-);
+app.use("/images", express.static(imagesDir, {
+  fallthrough: false,
+  setHeaders: (res, filePath) => {
+    res.set("Cache-Control", "public, max-age=3600");
+  }
+}));
 
 app.use(express.json());
 
 let client;
 const uri = process.env.MONGO_URI || "mongodb+srv://wednesday:wednesday@cluster0.2q635.mongodb.net/after_school_activities?retryWrites=true&w=majority";
 
-// Helper: get current DB instance
 function getDb() {
   if (!client) throw new Error("Database client not initialized");
   return client.db("after_school_activities");
 }
 
-// Helper: retry mechanism with exponential backoff
 async function executeWithRetry(fn, retries = 3, delay = 1000) {
   for (let i = 0; i < retries; i++) {
     try {
@@ -73,7 +68,6 @@ async function executeWithRetry(fn, retries = 3, delay = 1000) {
   }
 }
 
-// Initialize MongoDB connection and indexes
 async function initializeDatabase() {
   try {
     client = new MongoClient(uri, {
@@ -84,8 +78,6 @@ async function initializeDatabase() {
     logActivity("Info", "Connected to MongoDB");
 
     const db = getDb();
-
-    // Create text index on 'subject' and 'location' for search
     await executeWithRetry(() =>
       db.collection("lessons").createIndex(
         { subject: "text", location: "text" },
@@ -94,14 +86,16 @@ async function initializeDatabase() {
     );
     logActivity("Info", "Created search indexes");
 
-    // Load default lessons if less than 10 exist
+    // Load default lessons if fewer than 10 exist
     const lessonsCount = await executeWithRetry(() =>
       db.collection("lessons").countDocuments()
     );
     if (lessonsCount < 10) {
       const defaultLessonsPath = path.join(__dirname, "defaultLessons.json");
       const defaultLessons = JSON.parse(fs.readFileSync(defaultLessonsPath, "utf8"));
-      await executeWithRetry(() => db.collection("lessons").insertMany(defaultLessons.lessons));
+      await executeWithRetry(() =>
+        db.collection("lessons").insertMany(defaultLessons.lessons)
+      );
       logActivity("Info", "Added default lessons from JSON file");
     }
   } catch (err) {
@@ -111,19 +105,20 @@ async function initializeDatabase() {
 }
 initializeDatabase();
 
-// Graceful shutdown: close MongoDB client on SIGINT
+// Graceful shutdown: close MongoDB connection on SIGINT
 process.on("SIGINT", async () => {
   logActivity("Info", "Closing database connection...");
   if (client) await client.close();
   process.exit(0);
 });
 
+// Root endpoint
 app.get("/", (req, res) => {
   logActivity("Info", "Root endpoint hit");
   res.send("School Activities API is running");
 });
 
-// GET /lessons: return lessons with optional pagination
+// GET /lessons: Return lessons with optional pagination
 app.get("/lessons", async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -139,7 +134,7 @@ app.get("/lessons", async (req, res) => {
   }
 });
 
-// PUT /lessons/:id: update lesson attributes (e.g., spaces, subject, etc.)
+// PUT /lessons/:id: Update lesson attributes
 app.put("/lessons/:id", async (req, res) => {
   try {
     const updates = req.body;
@@ -170,7 +165,6 @@ app.put("/lessons/:id", async (req, res) => {
   }
 });
 
-// GET /search: perform full-text search on lessons
 app.get("/search", async (req, res) => {
   try {
     const query = req.query.q;
@@ -205,7 +199,7 @@ app.get("/search", async (req, res) => {
   }
 });
 
-// POST /orders: place a new order with order validation and update lesson spaces
+// POST /orders: Place a new order, validate inputs, update lesson spaces
 app.post("/orders", async (req, res) => {
   try {
     const { name, phone, lessons } = req.body;
@@ -261,7 +255,6 @@ app.post("/orders", async (req, res) => {
   }
 });
 
-// GET /orders: fetch orders with optional pagination
 app.get("/orders", async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -280,7 +273,6 @@ app.get("/orders", async (req, res) => {
 app.use((req, res) => {
   res.status(404).json({ error: "Endpoint not found" });
 });
-
 
 app.use((err, req, res, next) => {
   logActivity("Error", `Server error: ${err.message}`);
