@@ -6,7 +6,7 @@ const fs = require("fs");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Logger function to log activity with a formatted timestamp
+// Logger function to log activities with a formatted timestamp
 function logActivity(activity, details = "") {
   const now = new Date();
   const formattedTime = now.toLocaleString("en-US", {
@@ -20,8 +20,9 @@ function logActivity(activity, details = "") {
   console.log(`[${formattedTime}] ${activity}${details ? " | " + details : ""}`);
 }
 
-// CORS headers to allow any origin and specific headers and methods.
+// --- CORS and General Middleware ---
 app.use((req, res, next) => {
+  // Allow all origins and required headers/methods.
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Accept");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
@@ -29,29 +30,31 @@ app.use((req, res, next) => {
   next();
 });
 
-// Logger middleware to output all incoming requests.
+// Logger middleware: logs all requests
 app.use((req, res, next) => {
   logActivity("Request", `${req.method} ${req.url}`);
   next();
 });
 
-// Ensure images directory exists and serve images with a static middleware. 
-// If an image file is not found, a 404 error is automatically returned.
+// --- Static Files for Images ---
 const imagesDir = path.join(__dirname, "images");
 if (!fs.existsSync(imagesDir)) {
   fs.mkdirSync(imagesDir);
 }
-app.use("/images", express.static(imagesDir, {
-  fallthrough: false,
-  setHeaders: (res, filePath) => {
-    res.set("Cache-Control", "public, max-age=3600");
-  }
-}));
+app.use(
+  "/images",
+  express.static(imagesDir, {
+    fallthrough: false, // if file is missing, automatically throw 404
+    setHeaders: (res, filePath) => {
+      res.set("Cache-Control", "public, max-age=3600");
+    },
+  })
+);
 
-// Enable JSON request body parsing.
+// JSON body parsing
 app.use(express.json());
 
-// MongoDB connection setup using the native Node.js driver.
+// --- MongoDB Setup using native driver ---
 let client;
 const uri = process.env.MONGO_URI || "mongodb+srv://wednesday:wednesday@cluster0.2q635.mongodb.net/after_school_activities?retryWrites=true&w=majority";
 
@@ -60,7 +63,7 @@ function getDb() {
   return client.db("after_school_activities");
 }
 
-// Helper function to retry MongoDB operations in case of failure.
+// Helper function to retry DB operations
 async function executeWithRetry(fn, retries = 3, delay = 1000) {
   for (let i = 0; i < retries; i++) {
     try {
@@ -76,7 +79,7 @@ async function executeWithRetry(fn, retries = 3, delay = 1000) {
   }
 }
 
-// Initialize the MongoDB connection and the lessons collection.
+// Initialize the MongoDB connection and populate default lessons if needed
 async function initializeDatabase() {
   try {
     client = new MongoClient(uri, {
@@ -87,7 +90,8 @@ async function initializeDatabase() {
     logActivity("Info", "Connected to MongoDB");
 
     const db = getDb();
-    // Create a text index for full-text search on subject and location.
+
+    // Create a text index for the lessons (subject and location are searchable)
     await executeWithRetry(() =>
       db.collection("lessons").createIndex(
         { subject: "text", location: "text" },
@@ -96,7 +100,7 @@ async function initializeDatabase() {
     );
     logActivity("Info", "Created search indexes");
 
-    // Load default lessons if there are fewer than 10 lessons available.
+    // Load default lessons if there are fewer than 10 documents.
     const lessonsCount = await executeWithRetry(() =>
       db.collection("lessons").countDocuments()
     );
@@ -115,20 +119,19 @@ async function initializeDatabase() {
 }
 initializeDatabase();
 
-// Graceful shutdown: close MongoDB connection on SIGINT
+// Graceful shutdown: close DB connection on SIGINT
 process.on("SIGINT", async () => {
   logActivity("Info", "Closing database connection...");
   if (client) await client.close();
   process.exit(0);
 });
 
-// Root endpoint for basic server status.
 app.get("/", (req, res) => {
   logActivity("Info", "Root endpoint hit");
   res.send("School Activities API is running");
 });
 
-// GET /lessons: Returns lessons as JSON with optional pagination.
+// GET /lessons: Retrieve lessons (with pagination)
 app.get("/lessons", async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -144,8 +147,7 @@ app.get("/lessons", async (req, res) => {
   }
 });
 
-// PUT /lessons/:id: Update attributes of a lesson.
-// Allows for updating any attribute including available spaces.
+// PUT /lessons/:id: Update any attribute of a lesson (e.g., update spaces)
 app.put("/lessons/:id", async (req, res) => {
   try {
     const updates = req.body;
@@ -176,10 +178,8 @@ app.put("/lessons/:id", async (req, res) => {
   }
 });
 
-// GET /search: Full-text search endpoint for lessons.
-// Accepts a query parameter "q". If the query is numeric, searches price and spaces as well.
 app.get("/search", async (req, res) => {
-  const query = (req.query.q || '').trim();
+  let query = (req.query.q || "").trim();
   try {
     if (!query || typeof query !== "string") {
       logActivity("Warning", "Search query required");
@@ -187,18 +187,26 @@ app.get("/search", async (req, res) => {
     }
     logActivity("Info", `Search query: ${query}`);
 
-    // If the query can be converted to a number, search numeric fields as well.
-    const numericQuery = isNaN(query) ? null : Number(query);
     let searchQuery;
-    if (numericQuery !== null) {
+    if (!isNaN(query)) {
+      // Numeric: search for price and spaces and also text fields via regex
+      const numericQuery = Number(query);
       searchQuery = {
         $or: [
-          { $text: { $search: query } },
           { price: numericQuery },
-          { spaces: numericQuery }
-        ]
+          { spaces: numericQuery },
+          { subject: { $regex: query, $options: "i" } },
+          { location: { $regex: query, $options: "i" } },
+        ],
+      };
+    } else if (query.length === 1) {
+      // For a one-letter search, use regex search on subject and location
+      const regex = new RegExp(query, "i");
+      searchQuery = {
+        $or: [{ subject: regex }, { location: regex }],
       };
     } else {
+      // Longer query: use full-text search
       searchQuery = { $text: { $search: query } };
     }
     const results = await executeWithRetry(() =>
@@ -212,23 +220,20 @@ app.get("/search", async (req, res) => {
   }
 });
 
-// POST /orders: Place a new order.
-// Validates "name" (letters only) and "phone" (numbers only).
-// Checks lesson availability and decrements the spaces accordingly.
-// Returns a JSON response with a success message that can be used to trigger a popup in the front-end.
 app.post("/orders", async (req, res) => {
   try {
     const { name, phone, lessons } = req.body;
     if (!name || !/^[A-Za-z\s'-]{2,}$/.test(name.trim())) {
       return res.status(400).json({ error: "Invalid name (minimum 2 letters)" });
     }
-    const phoneDigits = phone ? phone.replace(/\D/g, '') : '';
+    const phoneDigits = phone ? phone.replace(/\D/g, "") : "";
     if (phoneDigits.length < 8) {
       return res.status(400).json({ error: "Invalid phone (minimum 8 digits)" });
     }
     if (!Array.isArray(lessons) || lessons.length === 0) {
       return res.status(400).json({ error: "No lessons selected" });
     }
+    // Convert lesson IDs to ObjectId
     const lessonIds = lessons.map(l => new ObjectId(l.lessonId));
     const existingLessons = await executeWithRetry(() =>
       getDb().collection("lessons").find({ _id: { $in: lessonIds } }).toArray()
@@ -236,11 +241,11 @@ app.post("/orders", async (req, res) => {
     if (existingLessons.length !== lessons.length) {
       return res.status(400).json({ error: "One or more lessons not found" });
     }
-    // Check available spaces and decrement them accordingly.
+    // Check available spaces and decrement them
     for (const orderLesson of lessons) {
       const lessonFound = existingLessons.find(l => l._id.toString() === orderLesson.lessonId);
       if (!lessonFound || lessonFound.spaces < orderLesson.quantity) {
-        return res.status(400).json({ error: `Not enough spaces available for lesson ID ${orderLesson.lessonId}` });
+        return res.status(400).json({ error: `Not enough spaces for lesson ID ${orderLesson.lessonId}` });
       }
       await executeWithRetry(() =>
         getDb().collection("lessons").updateOne(
@@ -249,20 +254,19 @@ app.post("/orders", async (req, res) => {
         )
       );
     }
-    // Create the order document
+    // Save order document
     const order = {
       name: name.trim(),
       phone: phoneDigits,
       lessons,
       date: new Date(),
-      status: "confirmed"
+      status: "confirmed",
     };
     const result = await executeWithRetry(() =>
       getDb().collection("orders").insertOne(order)
     );
     logActivity("Info", `Order created with ID: ${result.insertedId}`);
-    // The JSON response includes a confirmation message that front-end developers can use
-    // to display a pop-up indicating "Order submitted".
+  
     res.status(201).json({ message: "Order created successfully", orderId: result.insertedId });
   } catch (err) {
     logActivity("Error", `Failed to create order: ${err.message}`);
@@ -273,7 +277,7 @@ app.post("/orders", async (req, res) => {
   }
 });
 
-// GET /orders: Retrieves a list of orders with optional pagination.
+// GET /orders: Retrieve a list of orders (with pagination)
 app.get("/orders", async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -289,18 +293,18 @@ app.get("/orders", async (req, res) => {
   }
 });
 
-// 404 handler for endpoints that are not found.
+// 404 handler for undefined endpoints
 app.use((req, res) => {
   res.status(404).json({ error: "Endpoint not found" });
 });
 
-// Generic error handler middleware.
+// Generic error handler middleware
 app.use((err, req, res, next) => {
   logActivity("Error", `Server error: ${err.message}`);
   res.status(500).json({ error: "Internal server error" });
 });
 
-// Start the server and log available endpoints.
+// Start the server
 app.listen(PORT, () => {
   logActivity("Info", `Server running on port ${PORT}`);
   console.log("Available endpoints:");
@@ -309,5 +313,5 @@ app.listen(PORT, () => {
   console.log("- PUT /lessons/:id");
   console.log("- POST /orders");
   console.log("- GET /orders?page=&limit=");
-  console.log("- GET /images (to serve images)");
+  console.log("- GET /images to serve images");
 });
