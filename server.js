@@ -6,6 +6,7 @@ const fs = require("fs");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Logger function to log activity with a formatted timestamp
 function logActivity(activity, details = "") {
   const now = new Date();
   const formattedTime = now.toLocaleString("en-US", {
@@ -19,6 +20,7 @@ function logActivity(activity, details = "") {
   console.log(`[${formattedTime}] ${activity}${details ? " | " + details : ""}`);
 }
 
+// CORS headers to allow any origin and specific headers and methods.
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Accept");
@@ -27,11 +29,14 @@ app.use((req, res, next) => {
   next();
 });
 
+// Logger middleware to output all incoming requests.
 app.use((req, res, next) => {
   logActivity("Request", `${req.method} ${req.url}`);
   next();
 });
 
+// Ensure images directory exists and serve images with a static middleware. 
+// If an image file is not found, a 404 error is automatically returned.
 const imagesDir = path.join(__dirname, "images");
 if (!fs.existsSync(imagesDir)) {
   fs.mkdirSync(imagesDir);
@@ -43,8 +48,10 @@ app.use("/images", express.static(imagesDir, {
   }
 }));
 
+// Enable JSON request body parsing.
 app.use(express.json());
 
+// MongoDB connection setup using the native Node.js driver.
 let client;
 const uri = process.env.MONGO_URI || "mongodb+srv://wednesday:wednesday@cluster0.2q635.mongodb.net/after_school_activities?retryWrites=true&w=majority";
 
@@ -53,6 +60,7 @@ function getDb() {
   return client.db("after_school_activities");
 }
 
+// Helper function to retry MongoDB operations in case of failure.
 async function executeWithRetry(fn, retries = 3, delay = 1000) {
   for (let i = 0; i < retries; i++) {
     try {
@@ -68,6 +76,7 @@ async function executeWithRetry(fn, retries = 3, delay = 1000) {
   }
 }
 
+// Initialize the MongoDB connection and the lessons collection.
 async function initializeDatabase() {
   try {
     client = new MongoClient(uri, {
@@ -78,6 +87,7 @@ async function initializeDatabase() {
     logActivity("Info", "Connected to MongoDB");
 
     const db = getDb();
+    // Create a text index for full-text search on subject and location.
     await executeWithRetry(() =>
       db.collection("lessons").createIndex(
         { subject: "text", location: "text" },
@@ -86,7 +96,7 @@ async function initializeDatabase() {
     );
     logActivity("Info", "Created search indexes");
 
-    // Load default lessons if fewer than 10 exist
+    // Load default lessons if there are fewer than 10 lessons available.
     const lessonsCount = await executeWithRetry(() =>
       db.collection("lessons").countDocuments()
     );
@@ -112,13 +122,13 @@ process.on("SIGINT", async () => {
   process.exit(0);
 });
 
-// Root endpoint
+// Root endpoint for basic server status.
 app.get("/", (req, res) => {
   logActivity("Info", "Root endpoint hit");
   res.send("School Activities API is running");
 });
 
-// GET /lessons: Return lessons with optional pagination
+// GET /lessons: Returns lessons as JSON with optional pagination.
 app.get("/lessons", async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -134,7 +144,8 @@ app.get("/lessons", async (req, res) => {
   }
 });
 
-// PUT /lessons/:id: Update lesson attributes
+// PUT /lessons/:id: Update attributes of a lesson.
+// Allows for updating any attribute including available spaces.
 app.put("/lessons/:id", async (req, res) => {
   try {
     const updates = req.body;
@@ -165,8 +176,10 @@ app.put("/lessons/:id", async (req, res) => {
   }
 });
 
+// GET /search: Full-text search endpoint for lessons.
+// Accepts a query parameter "q". If the query is numeric, searches price and spaces as well.
 app.get("/search", async (req, res) => {
-    const query = (req.query.search_query || '').trim();
+  const query = (req.query.q || '').trim();
   try {
     if (!query || typeof query !== "string") {
       logActivity("Warning", "Search query required");
@@ -174,7 +187,7 @@ app.get("/search", async (req, res) => {
     }
     logActivity("Info", `Search query: ${query}`);
 
-    // If query is numeric, also search price and spaces
+    // If the query can be converted to a number, search numeric fields as well.
     const numericQuery = isNaN(query) ? null : Number(query);
     let searchQuery;
     if (numericQuery !== null) {
@@ -199,7 +212,10 @@ app.get("/search", async (req, res) => {
   }
 });
 
-// POST /orders: Place a new order, validate inputs, update lesson spaces
+// POST /orders: Place a new order.
+// Validates "name" (letters only) and "phone" (numbers only).
+// Checks lesson availability and decrements the spaces accordingly.
+// Returns a JSON response with a success message that can be used to trigger a popup in the front-end.
 app.post("/orders", async (req, res) => {
   try {
     const { name, phone, lessons } = req.body;
@@ -220,7 +236,7 @@ app.post("/orders", async (req, res) => {
     if (existingLessons.length !== lessons.length) {
       return res.status(400).json({ error: "One or more lessons not found" });
     }
-    // Check available spaces and decrement them accordingly
+    // Check available spaces and decrement them accordingly.
     for (const orderLesson of lessons) {
       const lessonFound = existingLessons.find(l => l._id.toString() === orderLesson.lessonId);
       if (!lessonFound || lessonFound.spaces < orderLesson.quantity) {
@@ -245,6 +261,8 @@ app.post("/orders", async (req, res) => {
       getDb().collection("orders").insertOne(order)
     );
     logActivity("Info", `Order created with ID: ${result.insertedId}`);
+    // The JSON response includes a confirmation message that front-end developers can use
+    // to display a pop-up indicating "Order submitted".
     res.status(201).json({ message: "Order created successfully", orderId: result.insertedId });
   } catch (err) {
     logActivity("Error", `Failed to create order: ${err.message}`);
@@ -255,6 +273,7 @@ app.post("/orders", async (req, res) => {
   }
 });
 
+// GET /orders: Retrieves a list of orders with optional pagination.
 app.get("/orders", async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -270,15 +289,18 @@ app.get("/orders", async (req, res) => {
   }
 });
 
+// 404 handler for endpoints that are not found.
 app.use((req, res) => {
   res.status(404).json({ error: "Endpoint not found" });
 });
 
+// Generic error handler middleware.
 app.use((err, req, res, next) => {
   logActivity("Error", `Server error: ${err.message}`);
   res.status(500).json({ error: "Internal server error" });
 });
 
+// Start the server and log available endpoints.
 app.listen(PORT, () => {
   logActivity("Info", `Server running on port ${PORT}`);
   console.log("Available endpoints:");
