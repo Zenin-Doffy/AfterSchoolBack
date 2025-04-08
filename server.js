@@ -166,8 +166,8 @@ app.put("/lessons/:id", async (req, res) => {
 });
 
 app.get("/search", async (req, res) => {
+    const query = (req.query.search_query || '').trim();
   try {
-    const query = req.query.q;
     if (!query || typeof query !== "string") {
       logActivity("Warning", "Search query required");
       return res.status(400).json({ error: "Search query required" });
