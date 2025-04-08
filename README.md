@@ -13,3 +13,7 @@ Link to the GitHub Repository - Frontend: https://github.com/Zenin-Doffy/Front_E
 Link to the GitHub Repository - Backend: https://github.com/Zenin-Doffy/AfterSchoolBack
 
 Link to the website: https://zenin-doffy.github.io/Front_End/
+
+Link to the render Lessons: https://backend-aba7.onrender.com/lessons
+
+Link to the render Orders: https://backend-aba7.onrender.com/orders
