@@ -1,0 +1,126 @@
+{
+	"info": {
+		"_postman_id": "aa598ad4-f1cb-4e1a-9b03-00fb73d168ba",
+		"name": "New Collection",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "43312150",
+		"_collection_link": "https://dark-water-579175.postman.co/workspace/Team-Workspace~99f316aa-2da5-4e19-8aee-29b72e34100e/collection/43312150-aa598ad4-f1cb-4e1a-9b03-00fb73d168ba?action=share&source=collection_link&creator=43312150"
+	},
+	"item": [
+		{
+			"name": "Get All Lessons",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://backend-aba7.onrender.com/lessons",
+					"protocol": "https",
+					"host": [
+						"backend-aba7",
+						"onrender",
+						"com"
+					],
+					"path": [
+						"lessons"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get All Orders",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://backend-aba7.onrender.com/orders",
+					"protocol": "https",
+					"host": [
+						"backend-aba7",
+						"onrender",
+						"com"
+					],
+					"path": [
+						"orders"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Search",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://backend-aba7.onrender.com/search?q=yourSearchTerm/Swimming",
+					"protocol": "https",
+					"host": [
+						"backend-aba7",
+						"onrender",
+						"com"
+					],
+					"path": [
+						"search"
+					],
+					"query": [
+						{
+							"key": "q",
+							"value": "yourSearchTerm/Swimming"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Insert New Order",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"url": {
+					"raw": "https://backend-aba7.onrender.com/lessons",
+					"protocol": "https",
+					"host": [
+						"backend-aba7",
+						"onrender",
+						"com"
+					],
+					"path": [
+						"lessons"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Update a Lesson",
+			"request": {
+				"method": "PUT",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://backend-aba7.onrender.com/lessons",
+					"protocol": "https",
+					"host": [
+						"backend-aba7",
+						"onrender",
+						"com"
+					],
+					"path": [
+						"lessons"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
