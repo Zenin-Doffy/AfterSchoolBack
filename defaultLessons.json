@@ -1,101 +1,100 @@
 {
-    "lessons": [
-      {
-        "subject": "Math",
-        "location": "Room 101",
-        "price": 50,
-        "spaces": 5,
-        "icon": "fa-book",
-        "image": "http://localhost:3000/images/Math.jpg"
-      },
-      {
-        "subject": "Science",
-        "location": "Room 102",
-        "price": 55,
-        "spaces": 5,
-        "icon": "fa-flask",
-        "image": "Science.jpg"
-      },
-      {
-        "subject": "Art",
-        "location": "Room 103",
-        "price": 60,
-        "spaces": 5,
-        "icon": "fa-palette",
-        "image": "Art.jpg"
-      },
-      {
-        "subject": "History",
-        "location": "Room 104",
-        "price": 45,
-        "spaces": 5,
-        "icon": "fa-landmark",
-        "image": "History.jpg"
-      },
-      {
-        "subject": "Music",
-        "location": "Room 105",
-        "price": 70,
-        "spaces": 5,
-        "icon": "fa-music",
-        "image": "Music.jpg"
-      },
-      {
-        "subject": "Coding",
-        "location": "Room 106",
-        "price": 80,
-        "spaces": 5,
-        "icon": "fa-laptop-code",
-        "image": "Coding.jpg"
-      },
-      {
-        "subject": "Dancing",
-        "location": "Room 107",
-        "price": 50,
-        "spaces": 5,
-        "icon": "fa-dance",
-        "image": "Dance.jpg"
-      },
-      {
-        "subject": "Sports",
-        "location": "Field",
-        "price": 40,
-        "spaces": 5,
-        "icon": "fa-basketball-ball",
-        "image": "Sports.jpg"
-      },
-      {
-        "subject": "Literature",
-        "location": "Room 108",
-        "price": 45,
-        "spaces": 5,
-        "icon": "fa-book-open",
-        "image": "Literature.jpg"
-      },
-      {
-        "subject": "Cooking",
-        "location": "Room 109",
-        "price": 60,
-        "spaces": 5,
-        "icon": "fa-utensils",
-        "image": "Cooking.jpg"
-      },
-      {
-        "subject": "Photography",
-        "location": "Room 110",
-        "price": 75,
-        "spaces": 5,
-        "icon": "fa-camera",
-        "image": "Photography.jpg"
-      },
-      {
-        "subject": "Chess",
-        "location": "Room 111",
-        "price": 40,
-        "spaces": 5,
-        "icon": "fa-chess",
-        "image": "Chess.jpg"
-      }
-    ]
-  }
-  
+  "lessons": [
+    {
+      "subject": "Swimming",
+      "location": "Room 101",
+      "price": 50,
+      "spaces": 5,
+      "icon": "fa-book",
+      "image": "swimming.jpg"
+    },
+    {
+      "subject": "Storytelling",
+      "location": "Room 102",
+      "price": 55,
+      "spaces": 5,
+      "icon": "fa-flask",
+      "image": "Storytelling.jpg"
+    },
+    {
+      "subject": "Art",
+      "location": "Room 103",
+      "price": 60,
+      "spaces": 5,
+      "icon": "fa-palette",
+      "image": "Art.jpg"
+    },
+    {
+      "subject": "Gymnastics",
+      "location": "Room 104",
+      "price": 45,
+      "spaces": 5,
+      "icon": "fa-landmark",
+      "image": "gymnastics.jpg"
+    },
+    {
+      "subject": "Music",
+      "location": "Room 105",
+      "price": 70,
+      "spaces": 5,
+      "icon": "fa-music",
+      "image": "Music.jpg"
+    },
+    {
+      "subject": "Coding",
+      "location": "Room 106",
+      "price": 80,
+      "spaces": 5,
+      "icon": "fa-laptop-code",
+      "image": "Coding.jpg"
+    },
+    {
+      "subject": "Dancing",
+      "location": "Room 107",
+      "price": 50,
+      "spaces": 5,
+      "icon": "fa-dance",
+      "image": "Dance.jpg"
+    },
+    {
+      "subject": "Sports",
+      "location": "Field",
+      "price": 40,
+      "spaces": 5,
+      "icon": "fa-basketball-ball",
+      "image": "Sports.jpg"
+    },
+    {
+      "subject": "Origami",
+      "location": "Room 108",
+      "price": 45,
+      "spaces": 5,
+      "icon": "fa-book-open",
+      "image": "Origami.jpg.jpg"
+    },
+    {
+      "subject": "Cooking",
+      "location": "Room 109",
+      "price": 60,
+      "spaces": 5,
+      "icon": "fa-utensils",
+      "image": "Cooking.jpg"
+    },
+    {
+      "subject": "Photography",
+      "location": "Room 110",
+      "price": 75,
+      "spaces": 5,
+      "icon": "fa-camera",
+      "image": "Photography.jpg"
+    },
+    {
+      "subject": "Chess",
+      "location": "Room 111",
+      "price": 40,
+      "spaces": 5,
+      "icon": "fa-chess",
+      "image": "Chess.jpg"
+    }
+  ]
+}
